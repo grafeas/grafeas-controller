@@ -47,10 +47,16 @@ func deleteObject(object, name string, ns *v1.Namespace) error {
 	deleteCmd := exec.Command("kubectl", "delete", object, name)
 	if ns != nil {
 		deleteCmd.Args = append(deleteCmd.Args, []string{"-n", ns.Name}...)
-	}
-	_, err := integration_util.RunCmdOut(deleteCmd)
-	if err != nil {
-		return fmt.Errorf("error deleting %s %s in namespace %s: %v", object, name, ns.Name, err)
+
+		_, err := integration_util.RunCmdOut(deleteCmd)
+		if err != nil {
+			return fmt.Errorf("error deleting %s %s in namespace %s: %v", object, name, ns.Name, err)
+		}
+	} else {
+		_, err := integration_util.RunCmdOut(deleteCmd)
+		if err != nil {
+			return fmt.Errorf("error deleting %s %s: %v", object, name, err)
+		}
 	}
 	return nil
 }
