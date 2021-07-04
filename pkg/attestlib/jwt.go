@@ -45,6 +45,66 @@ func getAlgName(alg SignatureAlgorithm) string {
 	}
 }
 
+type jwtSigner struct {
+	privateKey         interface{}
+	publicKeyID        string
+	signatureAlgorithm SignatureAlgorithm
+}
+
+// NewJwtSigner creates a Signer interface for JWT Attestations. `privateKey`
+// contains the PEM-encoded private key. `publicKeyID` is the ID of the public
+// key that can verify the Attestation signature. In most cases, publicKeyID should be left empty and will be generated automatically.
+func NewJwtSigner(privateKey []byte, alg SignatureAlgorithm, publicKeyID string) (Signer, error) {
+	key, err := parsePkixPrivateKeyPem(privateKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "error parsing private key")
+	}
+
+	// If no ID is provided one is computed based on the default digest-based URI extracted from the public key material
+	if len(publicKeyID) == 0 {
+		publicKeyID, err = generatePkixPublicKeyId(key)
+		if err != nil {
+			return nil, errors.Wrap(err, "error generating public key id")
+		}
+	}
+	return &jwtSigner{
+		privateKey:         key,
+		publicKeyID:        publicKeyID,
+		signatureAlgorithm: alg,
+	}, nil
+}
+
+// CreateAttestation creates a signed JWT Attestation. See Signer for more details.
+// jsonJwtBody is the second section in the JWT. This should contain the following claims:
+// "sub" = container:digest:sha256:<my-image-digest>,  "aud" : "//binaryauthorization.googleapis.com", "attestationType" : "claimless"
+func (s *jwtSigner) CreateAttestation(jsonJwtBody []byte) (*Attestation, error) {
+	type headerTemplate struct {
+		typ, alg, kid string
+	}
+	header := headerTemplate{
+		typ: "JWT",
+		alg: getAlgName(s.signatureAlgorithm),
+		kid: s.publicKeyID,
+	}
+
+	headerJson, err := json.Marshal(header)
+	if err != nil {
+		return nil, errors.Wrap(err, "error marshaling header")
+	}
+	headerBase64 := base64.RawURLEncoding.EncodeToString(headerJson)
+	jsonJwtBodyBase64 := base64.RawURLEncoding.EncodeToString(jsonJwtBody)
+	signature, err := createDetachedSignature(s.privateKey, []byte(headerBase64+"."+jsonJwtBodyBase64), s.signatureAlgorithm)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating signature")
+	}
+	signatureBase64 := base64.RawURLEncoding.EncodeToString(signature)
+	jwt := headerBase64 + "." + jsonJwtBodyBase64 + "." + signatureBase64
+	return &Attestation{
+		PublicKeyID: s.publicKeyID,
+		Signature:   []byte(jwt),
+	}, nil
+}
+
 func checkHeader(headerIn []byte, publicKey PublicKey) error {
 	type headerTemplate struct {
 		Typ, Alg, Kid, Crit string

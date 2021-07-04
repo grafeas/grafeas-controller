@@ -17,9 +17,6 @@ limitations under the License.
 package attestlib
 
 import (
-	"crypto/ecdsa"
-	"crypto/rsa"
-	"fmt"
 	"github.com/pkg/errors"
 )
 
@@ -54,39 +51,15 @@ func NewPkixSigner(privateKey []byte, alg SignatureAlgorithm, publicKeyID string
 
 // CreateAttestation creates a signed PKIX Attestation. See Signer for more details.
 func (s *pkixSigner) CreateAttestation(payload []byte) (*Attestation, error) {
-	switch s.signatureAlgorithm {
-	case RsaSignPkcs12048Sha256, RsaSignPkcs13072Sha256, RsaSignPkcs14096Sha256, RsaSignPkcs14096Sha512, RsaPss2048Sha256, RsaPss3072Sha256, RsaPss4096Sha256, RsaPss4096Sha512:
-		rsaKey, ok := s.privateKey.(*rsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("expected rsa key")
-		}
-		signature, err := rsaSign(rsaKey, payload, s.signatureAlgorithm)
-		if err != nil {
-			return nil, errors.Wrap(err, "error creating rsa signature")
-		}
-		return &Attestation{
-			PublicKeyID:       s.publicKeyID,
-			Signature:         signature,
-			SerializedPayload: payload,
-		}, nil
-	case EcdsaP256Sha256, EcdsaP384Sha384, EcdsaP521Sha512:
-		ecKey, ok := s.privateKey.(*ecdsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("expected ecdsa key")
-		}
-		signature, err := ecSign(ecKey, payload, s.signatureAlgorithm)
-		if err != nil {
-			return nil, errors.Wrap(err, "error creating ecdsa signature")
-		}
-		return &Attestation{
-			PublicKeyID:       s.publicKeyID,
-			Signature:         signature,
-			SerializedPayload: payload,
-		}, nil
-	default:
-		return nil, fmt.Errorf("unknown signature algorithm: %v", s.signatureAlgorithm)
-
+	signature, err := createDetachedSignature(s.privateKey, payload, s.signatureAlgorithm)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating signature")
 	}
+	return &Attestation{
+		PublicKeyID:       s.publicKeyID,
+		Signature:         signature,
+		SerializedPayload: payload,
+	}, nil
 }
 
 type pkixVerifierImpl struct{}

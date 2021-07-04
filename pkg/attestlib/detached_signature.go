@@ -25,6 +25,7 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/pem"
+	"fmt"
 	"github.com/pkg/errors"
 	"math/big"
 )
@@ -43,6 +44,26 @@ func hashPayload(payload []byte, signingAlg SignatureAlgorithm) (crypto.Hash, []
 		return crypto.SHA512, hashedPayload[:], nil
 	default:
 		return 0, nil, errors.New("invalid signature algorithm")
+	}
+}
+
+func createDetachedSignature(privateKey interface{}, payload []byte, alg SignatureAlgorithm) ([]byte, error) {
+	switch alg {
+	case RsaSignPkcs12048Sha256, RsaSignPkcs13072Sha256, RsaSignPkcs14096Sha256, RsaSignPkcs14096Sha512, RsaPss2048Sha256, RsaPss3072Sha256, RsaPss4096Sha256, RsaPss4096Sha512:
+		rsaKey, ok := privateKey.(*rsa.PrivateKey)
+		if !ok {
+			return nil, errors.New("expected rsa key")
+		}
+		return rsaSign(rsaKey, payload, alg)
+	case EcdsaP256Sha256, EcdsaP384Sha384, EcdsaP521Sha512:
+		ecKey, ok := privateKey.(*ecdsa.PrivateKey)
+		if !ok {
+			return nil, errors.New("expected ecdsa key")
+		}
+		return ecSign(ecKey, payload, alg)
+	default:
+		return nil, fmt.Errorf("unknown signature algorithm: %v", alg)
+
 	}
 }
 

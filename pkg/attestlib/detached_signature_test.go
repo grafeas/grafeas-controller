@@ -254,3 +254,58 @@ func TestVerifyDetached(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateDetachedSignature(t *testing.T) {
+	tcs := []struct {
+		name          string
+		key           []byte
+		alg           SignatureAlgorithm
+		expectedError bool
+	}{
+		{
+			name:          "create rsa signature success",
+			key:           []byte(rsa2048PrivateKey),
+			alg:           RsaSignPkcs12048Sha256,
+			expectedError: false,
+		}, {
+			name:          "create ecdsa signature success",
+			key:           []byte(ec256PrivateKey),
+			alg:           EcdsaP256Sha256,
+			expectedError: false,
+		},
+		{
+			name:          "rsa key with ecdsa alg",
+			key:           []byte(rsa2048PrivateKey),
+			alg:           EcdsaP256Sha256,
+			expectedError: true,
+		}, {
+			name:          "ecdsa key with rsa alg",
+			key:           []byte(ec256PrivateKey),
+			alg:           RsaSignPkcs12048Sha256,
+			expectedError: true,
+		}, {
+			name:          "unknown singature algorithm",
+			key:           []byte(rsa2048PrivateKey),
+			alg:           UnknownSigningAlgorithm,
+			expectedError: true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			privKey, err := parsePkixPrivateKeyPem(tc.key)
+			if err != nil {
+				t.Fatalf("failed to parse private key %v", err)
+			}
+			_, err = createDetachedSignature(privKey, []byte(payload), tc.alg)
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("createDetachedSignature(...)=nil, expected non-nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("createDetachedSignature(...)=%v, expected nil", err)
+				}
+			}
+		})
+	}
+}
